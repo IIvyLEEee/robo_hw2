@@ -1,0 +1,81 @@
+defaults:
+  - /task/task_base@_here_
+  - _self_
+
+name: S1Re
+task:
+  name: manipulation_pap
+  params:
+    task_objects: ${task.object_collection.task_objects}
+    placement_strategy:
+      name: dual_arm
+      params:
+        clearance: 0.05
+        num_top_objects: 2
+robot: l7_fixed_lower_body
+scene: xbot_manip_scene
+has_lang_ins: True
+decimation: 10
+eye: [3.5, 0.0, 2.5]
+lookat: [1.5, 0.0, 1.0]
+
+action:
+  _target_: active_adaptation.envs.mdp.action.XbotActionManager
+
+max_episode_length: 250
+
+vla_image_keys: {}
+
+3dgs:
+  path: "xbot_3dgs/no_robot1.ply"
+  transform_homogeneous:
+    - [ -1.0, 0.0, 0.0, 0.2022]
+    - [ 0.0, -1.0, 0.0, 0.1419 ]
+    - [ 0.0, 0.0, 1.0, -0.07922]
+    - [ 0.0, 0.0, 0.0, 1.0 ]
+  y_up: true
+
+observation:
+  world_cam:
+    camera: {name: "head_cam", debug: True, use_3dgs: true, color_alignment: "xbot_3dgs/color_alignment/head_cam/poly2_B_10x3.npy", cache_3dgs: false}
+  left_cam:
+    camera: {name: "left_wrist_cam", debug: False, use_3dgs: true, color_alignment: "xbot_3dgs/color_alignment/wrist_cam/poly2_B_10x3.npy", cache_3dgs: false}
+  right_cam:
+    camera: {name: "right_wrist_cam", debug: False, use_3dgs: true, color_alignment: "xbot_3dgs/color_alignment/wrist_cam/poly2_B_10x3.npy", cache_3dgs: false}
+  action_state:
+    action_state: {}
+
+
+object_collection:
+  task_objects:
+    - ["bowl_b", "xbot_task/plate/main_f2.usd", {
+        size: 0.11,
+        role: "btm",
+        z_offset: 0.02,
+        name: "blue bowl",
+        bbox: {x_range: [-0.05, 0.0], y_range: [-0.20, 0.20]}
+      }]
+    - ["bin", "xbot_task/bin/bin.usdc", {
+        size: 0.19,
+        role: "btm",
+        z_offset: 0.02,
+        name: "box",
+        bbox: {x_range: [-0.05, 0.0], y_range: [-0.10, 0.10]}
+      }]
+    - ["mango", "xbot_task/mango/mango.usdc", {
+        size: 0.05,
+        role: "top",
+        z_offset: 0.04,
+        name: "mango",
+        bbox: {x_range: [-0.25, 0.0], y_range: [-0.4, 0.4]}
+      }]
+    - ["apple", "xbot_task/apple/apple.usdc", {
+        size: 0.05,
+        role: "top",
+        z_offset: 0.04,
+        name: "apple",
+        bbox: {x_range: [-0.25, 0.0], y_range: [-0.4, 0.4]}
+      }]
+
+termination:
+  success_stack: {}

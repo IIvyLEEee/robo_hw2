@@ -1,0 +1,35 @@
+# Local repository metadata backups
+.git-backups/
+.monorepo.git/
+.agents/
+.codex/
+
+# Datasets, generated outputs, logs, and model artifacts
+diffusion_policy/data/
+diffusion_policy/outputs/
+diffusion_policy/wandb/
+diffusion_policy/logs/
+xbot_sim_benchmark/outputs/
+xbot_sim_benchmark/logs/
+**/wandb/
+**/outputs/
+**/logs/
+**/checkpoints/
+**/*.ckpt
+**/*.pt
+**/*.pth
+**/*.onnx
+
+# Python caches and build outputs
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+
+# Editor / OS files
+.vscode/
+.idea/
+**/.DS_Store

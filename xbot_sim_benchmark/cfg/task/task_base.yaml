@@ -1,0 +1,16 @@
+defaults:
+  # see https://hydra.cc/docs/advanced/overriding_packages/
+  - _self_
+
+# config some default values for each task, can be overridden by task-specific configs
+
+num_envs: 1
+max_episode_length: 1000
+has_lang_ins: False
+eye: [-6.0, 0.0, 10.0]
+lookat: [0.0, 0.0, 3.0]
+decimation: 4 # 4 * 0.005 = 0.02 = 50Hz
+
+randomization: {}
+
+observation: {}
