@@ -1,0 +1,485 @@
+% MIT License
+
+% Copyright (c) 2022 Chiyuru
+
+% Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), 
+% to deal in the Software without restriction, including without limitation the rights
+% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+% copies of the Software, and to permit persons to whom the Software is
+% furnished to do so, subject to the following conditions:
+
+% The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+% LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+% OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+\documentclass[UTF8]{ctexart}
+\setcounter{tocdepth}{2}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{colortbl}
+\usepackage{array}
+\usepackage{cases}
+\usepackage{cite}
+\usepackage{diagbox}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{tabularx}
+\usepackage{threeparttable}
+\usepackage{listings}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[margin=1in]{geometry}
+\geometry{a4paper}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{13pt}
+
+\usepackage{matlab}
+
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    backgroundcolor=\color{gray!10},
+    frame=single,
+    rulecolor=\color{black},
+    breaklines=true,
+    postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+}
+
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+
+\title{Advanced Topics for Robotics Homework 2}
+\author{Yixuan Li}
+\date{April 25, 2026}
+\pagenumbering{arabic}
+\renewcommand{\figurename}{Figure}
+\renewcommand{\tablename}{Table}
+\urlstyle{tt}
+\graphicspath{{report/images/}{images/}{./}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+
+\begin{document}
+
+\fancyhead[L]{HW1}
+\fancyhead[R]{Yixuan Li \, 2023010651}
+\fancyfoot[C]{\thepage}
+
+\maketitle
+\renewcommand{\contentsname}{Contents}
+\setcounter{tocdepth}{3}
+{
+\linespread{1}\selectfont
+\setlength{\parskip}{2pt}
+\tableofcontents
+}
+
+\newpage
+\section{Motion Preprocessing}
+
+All single-trajectory experiments use the \code{run1_subject2} task. The original retargeted motion \code{robotera_l7_run1_subject2_normal.csv} was converted into \code{run1_subject2.npz}, which stores the full motion state required by the tracking environment. This conversion is necessary because the policy is not trained only against joint positions; the environment also evaluates body poses, velocities, and accelerations computed through forward kinematics.
+
+The selected trajectory is a running motion between two target locations. It is a useful test case because it requires both global body stabilization and fast lower-limb tracking. As shown in Figure~\ref{fig:preprocess-replay}, the converted motion was replayed in Isaac Sim before training, and the replay confirmed that the reference motion was visually plausible and suitable as a tracking target.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{preprocess-replay.png}
+    \caption{Preprocessed reference motion replay}
+    \label{fig:preprocess-replay}
+\end{figure}
+
+\section{Policy Training}
+
+\paragraph{Training Setup} The baseline policy was trained for 3000 iterations with PPO on the L7 29-DoF tracking task, using 8192 parallel environments and seed 42. Training was logged with W\&B. The main indicators are mean reward, mean episode length, motion-tracking errors, rewards, and sampling metrics. Reward and episode length summarize task progress, while tracking errors separate global anchor alignment, body-pose imitation, and joint-level motion quality.
+
+\paragraph{Overall Metrics}
+
+Figure~\ref{fig:baseline-overall} summarizes the baseline learning progress. Both curves increase during training, showing that the policy learns to balance longer before falling and improving the tracking reward. 3000 steps is sufficient for convergence, and adaptive oscillation is observed before saturation.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{mean_reward&ep_length.png}
+    \caption{Baseline reward and episode length}
+    \label{fig:baseline-overall}
+\end{figure}
+
+\paragraph{Tracking Errors and Rewards}
+
+Figure~\ref{fig:baseline-rewards} shows how the learned policy balances anchor tracking, body tracking, action smoothness, joint limits, and contact penalties. Except for \code{action_rate}, \code{joint_limit}, and \code{undesired_contacts}, higher reward components indicate closer tracking of the reference motion and therefore better policy performance.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{reward_metrics_9.png}
+    \caption{Baseline reward components}
+    \label{fig:baseline-rewards}
+\end{figure}
+
+Figures~\ref{fig:baseline-joint-errors}, \ref{fig:baseline-body-errors}, and \ref{fig:baseline-anchor-errors} further separate local joint-level tracking, body-pose imitation, and global root alignment. Except for \code{error_anchor_pos} in Figure~\ref{fig:baseline-anchor-errors}, all tracking errors decrease during training. The increase in \code{error_anchor_pos} means that the robot's global position diverges from the reference. This occurs because the termination condition only checks the anchor position along the z-axis, so the policy can maintain stable but large drift along the x and y axes.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{joint_error_metrics2.png}
+    \caption{Baseline joint tracking errors}
+    \label{fig:baseline-joint-errors}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{body_error_metrics4.png}
+    \caption{Baseline body tracking errors}
+    \label{fig:baseline-body-errors}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{anchor_error_metrics4.png}
+    \caption{Baseline anchor tracking errors}
+    \label{fig:baseline-anchor-errors}
+\end{figure}
+
+\paragraph{Sampling Metrics}
+
+Figure~\ref{fig:baseline-sampling} reports the baseline motion-sampling diagnostics. 
+A higher sampling top-1 probability means that sampled motion segments are more concentrated. The figure shows that the model initially samples frames from the motion relatively uniformly, then quickly focuses on a small number of difficult segments. Later in training, the sampling distribution gradually becomes more uniform again, as indicated by the increase in sampling entropy.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{sampling_metrics_3.png}
+    \caption{Baseline sampling diagnostics}
+    \label{fig:baseline-sampling}
+\end{figure}
+
+\section{Policy Evaluation}
+
+The trained baseline policy was evaluated on the same \code{run1_subject2} motion used for training. Figure~\ref{fig:baseline-eval} and its corresponding video show that the policy preserves the global running rhythm, follows the main body orientation, and keeps the limb motion broadly synchronized with the reference.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{fix_baseline.png}
+    \caption{Baseline policy evaluation}
+    \label{fig:baseline-eval}
+\end{figure}
+
+The reference trajectory moves between two locations, whereas the learned policy runs toward the first target, briefly slows down, and then continues in the same direction \textbf{without u-turn}. This mismatch is caused by the task formulation: termination checks the z axis of the anchor position and does not terminate large drift in x and y axes, so a policy can imitate the locomotion pattern without exactly closing the global route. Since this homework focuses on learning the running behavior rather than route following, this route mismatch does not invalidate our policy.
+
+The largest visible error occurs during fast leg swings. In Figure~\ref{fig:baseline-eval}, the distance between the reference marker and the robot leg increases when the target leg moves quickly. The learned running gait is less uniform than the reference: some strides are longer, while later strides shorten to recover balance. This behavior shows the central trade-off in the task: \textbf{the policy sacrifices exact local imitation when necessary to preserve dynamic stability}.
+
+\section{Discussion}
+
+\subsection{Experiment Setup}
+
+To identify which configuration choices most strongly affect the learned behavior, I compared the baseline policy with seven controlled ablations. All runs used the same task, motion, seed, and training budget, and each run changed only one configuration group. The eight runs were trained on RTX 5090 GPUs. The observed curves and evaluation videos show that 3000 training iterations are sufficient for all single-trajectory policies to converge. The detailed ablation settings are listed in  Table~\ref{tab:ablation-settings}. Blank entries indicate that the corresponding parameter keeps its baseline value.
+
+\begin{table}[H]
+    \centering
+    \caption{Ablation settings}
+    \label{tab:ablation-settings}
+    \scriptsize
+    \resizebox{\linewidth}{!}{
+    \begin{tabular}{llcccccccc}
+        \toprule
+        Group & Variable & Baseline & Low LR & High LR & Zero Entropy & High Entropy & Body strong & Anchor strong & Weak action penalty \\
+        \midrule
+        PPO & \path{agent.algorithm.learning_rate} & \code{1e-3} & \code{3e-4} & \code{2e-3} & -- & -- & -- & -- & -- \\
+        PPO & \path{agent.algorithm.entropy_coef} & \code{0.005} & -- & -- & \code{0.0} & \code{0.01} & -- & -- & -- \\
+        Reward & \path{env.rewards.motion_body_pos.weight} & \code{1.0} & -- & -- & -- & -- & \code{2.0} & -- & -- \\
+        Reward & \path{env.rewards.motion_body_ori.weight} & \code{1.0} & -- & -- & -- & -- & \code{2.0} & -- & -- \\
+        Reward & \path{env.rewards.motion_global_anchor_pos.weight} & \code{0.5} & -- & -- & -- & -- & -- & \code{1.0} & -- \\
+        Reward & \path{env.rewards.motion_global_anchor_ori.weight} & \code{0.5} & -- & -- & -- & -- & -- & \code{1.0} & -- \\
+        Reward & \path{env.rewards.action_rate_l2.weight} & \code{-1e-1} & -- & -- & -- & -- & -- & -- & \code{-1e-2} \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+\subsection{PPO Config}
+
+\subsubsection{Learning Rate}
+
+The learning rate controls the PPO update size. In Figure~\ref{fig:lr-overall}, both the higher learning rate and the lower learning rate reach the stable plateau later than the baseline. The tracking-error curves are similar across these three runs, so the most informative differences are reward, episode length, and termination behavior. For readability, the plotted curves were filtered for extreme values and smoothed with a 0.5 time-weighted EMA.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{lr_overall_metrics2.png}
+    \caption{Learning-rate ablation: overall metrics}
+    \label{fig:lr-overall}
+\end{figure}
+
+The termination metrics in Figure~\ref{fig:lr-termination} explain the difference more clearly. The high-learning-rate policy produces larger anchor-position and anchor-orientation termination signals, indicating riskier updates that more often move the policy into unstable behavior. The low-learning-rate policy is more conservative early in training, but its slower exploration delays entry into the better-performing region, so its \code{anchor_ori} termination metrics rise above the baseline around 2400 iterations.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{lr_termination_metrics2.png}
+    \caption{Learning-rate ablation: termination metrics}
+    \label{fig:lr-termination}
+\end{figure}
+
+The evaluation videos match these curves. In Figure~\ref{fig:lr-float}, the lower-learning-rate policy moves more steadily, even more smoothly than the baseline in some frames. The higher-learning-rate policy shows more visible jitter and less uniform stride length. This comparison only evaluates the training motion; no generalization experiment was conducted, so the effect of the lower learning rate on out-of-distribution robustness remains untested.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.3\linewidth]{float_lr_low.png}
+    \includegraphics[width=0.3\linewidth]{float_baseline.png}
+    \includegraphics[width=0.3\linewidth]{float_lr_high.png}
+    \caption{Learning-rate ablation: floating-view snapshots}
+    \label{fig:lr-float}
+\end{figure}
+
+\subsubsection{Entropy Coefficient}
+
+The entropy coefficient controls how strongly PPO maintains exploration. Figure~\ref{fig:entropy-loss} shows the direct effect on policy entropy: removing the entropy bonus accelerates the decay of entropy, while increasing the coefficient keeps the policy distribution more stochastic.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.35\linewidth]{entropy.png}
+    \caption{Entropy loss comparison}
+    \label{fig:entropy-loss}
+\end{figure}
+
+The overall training metrics in Figure~\ref{fig:entropy-overall} show that both entropy modifications reduce final mean reward relative to the baseline. The high-entropy policy converges more slowly but eventually reaches a similar episode length to the baseline. The zero-entropy policy also learns more slowly and finishes with a substantially shorter episode length, indicating that sufficient exploration is necessary for RL tasks.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{entropy_overall_metrics2.png}
+    \caption{Entropy ablation: overall metrics}
+    \label{fig:entropy-overall}
+\end{figure}
+
+Figure~\ref{fig:entropy-errors} reports the corresponding tracking errors. The zero-entropy run, shown by the mint-green curve, significantly slows the convergence of multiple tracking errors.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{entropy_error_metrics9.png}
+    \caption{Entropy ablation: tracking errors}
+    \label{fig:entropy-errors}
+\end{figure}
+
+The evaluation videos provide the qualitative explanation. Figure~\ref{fig:entropy-float} shows that the zero-entropy policy fails to learn correct arm motions and appears stumbling. The high-entropy policy runs more slowly than the baseline and shows noticeable upper-body oscillation, but its lower-body motion remains comparatively robust. The baseline entropy coefficient therefore gives the best compromise between exploration and precise tracking for this setup.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{float_entropy.png}
+    \caption{Entropy ablation: floating-view snapshots}
+    \label{fig:entropy-float}
+\end{figure}
+
+\subsection{Env Config}
+
+\subsubsection{Body/Anchor Tracking Reward}
+
+Increasing the body and anchor tracking weights makes the corresponding imitation objective more important in the total reward. Since the raw mean reward is not normalized by the changed weights, its absolute value is not directly comparable across these runs. The convergence trend and termination metrics are more informative.
+
+Figure~\ref{fig:body-anchor-overall} shows that both stronger body tracking and stronger anchor tracking accelerate convergence. Stronger anchor tracking reduces anchor-position-related termination, while stronger body tracking reduces body-position-related termination. These results show that the modified reward terms improve the specific failure modes they target.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{body_anchor_overall_metrics2.png}
+    \caption{Body/anchor reward ablations}
+    \label{fig:body-anchor-overall}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.3\linewidth]{fix_baseline_for_ref.png}
+    \includegraphics[width=0.3\linewidth]{fix_strong_body.png}
+    \includegraphics[width=0.3\linewidth]{fix_strong_anchor.png}
+    \caption{Body/anchor ablation: fixed-view snapshots}
+    \label{fig:body-anchor-fix}
+\end{figure}
+
+The video evidence in Figure~\ref{fig:body-anchor-fix} distinguishes the two reward changes. Stronger body tracking reduces unnecessary limb swing, regularizes stride length, and keeps the arms closer to the reference posture. Stronger anchor tracking improves global displacement stability: the robot follows a nearly straight trajectory and stays closer to the reference route. These two effects are complementary and optimize different aspects of imitation.
+
+\subsubsection{Action Rate Penalty}
+
+The action-rate penalty discourages rapid changes in policy outputs. Weakening this penalty improves local tracking statistics, but it also exposes the difference between curve-level performance and physically desirable control. In the upper row of Figure~\ref{fig:action-penalty}, the weak-penalty policy obtains higher mean reward, longer episodes, and lower body-position termination, which are statistically satisfying. However, we can see on the lower row, entropy stays abnormally higher, the action-rate penalty becomes much less favorable, and anchor-orientation termination increases.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{action_penalty_metrics.png}
+    \caption{Action-rate penalty ablation}
+    \label{fig:action-penalty}
+\end{figure}
+
+Interestingly, this run is the only ablation without the adaptive oscillation seen during exploration in the other experiments. Its reward, episode length, and tracking-error curves converge smoothly. Figure~\ref{fig:action-rate-errors} further shows smooth improvement in the tracking errors. However, this smooth statistical convergence is misleading: the policy becomes better at matching local reference positions while ignoring whether the learned action sequence has good visual smoothness and physical stability.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{action_rate_error_metrics9.png}
+    \caption{Weak action-rate penalty: tracking errors}
+    \label{fig:action-rate-errors}
+\end{figure}
+
+The policy-only evaluation in Figure~\ref{fig:action-rate-float} confirms the control-quality problem. The robot shows more bouncing and limb shaking: it focuses on local similarity to the reference but loses whole-body coordination and stability. Therefore, the action-rate penalty is not merely a numerical regularizer; it is essential for producing motion that remains plausible in the real world.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.35\linewidth]{float_action_rate.png}
+    \caption{Weak action-rate penalty: floating-view snapshot}
+    \label{fig:action-rate-float}
+\end{figure}
+
+\subsection{Overall Interpretation}
+
+The most influential design choices are the reward terms rather than a single PPO scalar. Learning rate and entropy coefficient change how the policy searches for a solution, but reward terms define which solution is preferred. For \code{run1_subject2}, anchor tracking controls global route stability, body tracking controls local imitation quality, and action-rate regularization controls the trade-off between tracking accuracy and smooth, coordinated behavior.
+
+\section{Multiple Trajectories Mimic}
+
+\subsection{Experiment Setup}
+
+The multi-trajectory experiment trains one policy on 20 preprocessed motions instead of specializing to a single reference. As summarized in Figure~\ref{fig:multi-dataset}, the dataset contains jumps, pushes, runs, sprints, and walks. During training, each environment samples a motion id and then samples a valid local timestep from that motion. This avoids crossing motion boundaries and makes the training distribution explicit. The unique-count diagnostic in Figure~\ref{fig:multi-dataset} confirms that all 20 motions are sampled during training.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{dataset_makeup.png}
+    \includegraphics[width=0.45\linewidth]{motion_id_mean&cnt.png}
+    \caption{Multi-trajectory dataset and sampling diagnostics}
+    \label{fig:multi-dataset}
+\end{figure}
+
+\subsection{Results}
+
+The multi-trajectory policy was evaluated on the same \code{run1_subject2} motion as the single-trajectory baseline. This comparison tests whether a broader motion distribution preserves the original running behavior while reducing over-specialization.
+
+The multi-trajectory run converges more slowly than the single-trajectory baseline, so it was trained for 4400 iterations while keeping the other training settings unchanged. Figure~\ref{fig:multi-overall} shows that its training curves are smoother and do not contain the large oscillations present in the single-trajectory baseline.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{multi_overall_metrics2.png}
+    \caption{Single-trajectory versus multi-trajectory training}
+    \label{fig:multi-overall}
+\end{figure}
+
+In evaluation, the multi-trajectory policy performs the running task with a more walk-like gait, as shown in Figure~\ref{fig:multi-float}. Its strides are shorter and more conservative, and its forward speed is lower than the baseline. This behavior matches the dataset composition in Figure~\ref{fig:multi-dataset}: walk motions make up 50\% of the training set. The policy also shows some upper-body shaking and backward leaning, which are probably brought by the backward-leaning in walk/jump motions.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{float_multi.png}
+    \caption{Multi-trajectory policy evaluation}
+    \label{fig:multi-float}
+\end{figure}
+
+Joint torque provides a control-effort view of the same behavior. Figure~\ref{fig:multi-torque} shows that the multi-trajectory policy uses lower RMS torque during the early startup phase, which indicates a gentler transition into motion. After the initial phase, both policies produce similar torque magnitudes. The joint-wise comparison also shows that knees, hip roll joints, and hip pitch joints dominate the torque cost for both policies.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{torque_multi_vs_baseline.png}
+    \caption{Baseline versus multi-trajectory joint torque}
+    \label{fig:multi-torque}
+\end{figure}
+\appendix
+
+\section{Evaluation Videos}
+
+The submitted videos include
+
+\begin{enumerate}
+    \item the replay of the preprocessed reference trajectory
+    \item tiled evaluation videos for the nine learned policies: the baseline, seven ablation policies, and the multi-trajectory policy.
+\end{enumerate}
+
+Each evaluation is provided in both floating view, which shows local motion details, and fixed view, which shows the global trajectory. Figure~\ref{fig:video-summary} shows representative summary frames from these submitted videos.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\linewidth]{float_summary.png}
+    \includegraphics[width=0.75\linewidth]{fix_summary.png}
+    \caption{Submitted video summary snapshots}
+    \label{fig:video-summary}
+\end{figure}
+
+\section{Code Listings}
+
+The submitted zip contains only the modified files. The full repository is available at \url{https://github.com/IIvyLEEee/humanoid-lab}.
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{For Isaac Lab v2.3.2 compatibility.} 
+    \begin{itemize}[leftmargin=1.5em,label={$\square$}]
+        \item \path{scripts/rsl_rl/play.py} 
+        \item \path{source/era_okcc_humanoid_lab/era_okcc_humanoid_lab/tasks/mimic/agents/rsl_rl_ppo_cfg.py}
+    \end{itemize}
+    
+    \item \textbf{For Visualization support.} 
+    \begin{itemize}[leftmargin=1.5em,label={$\square$}]
+        \item \path{scripts/replay_l7_npz.py} was extended to record fixed-view reference replay videos. 
+        \item \path{scripts/rsl_rl/play.py} was extended to record both floating-view and fixed-view policy evaluation videos and to measure joint torque during evaluation.
+    \end{itemize}
+    
+    \item \textbf{Multi-trajectory training support.} 
+    \begin{itemize}[leftmargin=1.5em,label={$\square$}]
+        \item \path{scripts/rsl_rl/train.py} was extended to accept a list of motion files. 
+        \item \path{source/era_okcc_humanoid_lab/era_okcc_humanoid_lab/tasks/mimic/mdp/commands.py} was modified so that \code{MotionLoader} can load multiple motion files, concatenate their tensors, store each motion's length and offset, and sample a valid \code{motion_id} and local timestep on reset.
+    \end{itemize}
+\end{itemize}
+
+\section{Reproducibility Commands}
+
+\subsection{Motion Preprocessing}
+
+\begin{lstlisting}[language=bash]
+python scripts/l7_csv_to_npz.py \
+  --input_file motions/LAFAN-L3/robotera_l7_run1_subject2_normal.csv \
+  --output_name run1_subject2 \
+  --no_wandb \
+  --save_to motions/run1_subject2.npz
+\end{lstlisting}
+
+\subsection{Reference Motion Replay}
+
+\begin{lstlisting}[language=bash]
+python scripts/replay_l7_npz.py \
+  --motion_file motions/run1_subject2.npz
+\end{lstlisting}
+
+\subsection{Single-Trajectory Baseline Training}
+
+\begin{lstlisting}[language=bash]
+CUDA_VISIBLE_DEVICES=1 python scripts/rsl_rl/train.py \
+  --task=Tracking-Flat-L7_29Dof-v0 \
+  --motion_file motions/run1_subject2.npz \
+  --run_name baseline_seed42 \
+  --num_envs=8192 \
+  --headless \
+  --logger wandb \
+  --log_project_name humanoid-lab \
+  --seed 42
+\end{lstlisting}
+
+\subsection{Policy Evaluation}
+
+\begin{lstlisting}[language=bash]
+python scripts/rsl_rl/play.py \
+  --task=Tracking-Flat-L7_29Dof-v0 \
+  --motion_file motions/run1_subject2.npz \
+  --model_path logs/ckpt/<experiment_name>/model_3000.pt \
+  --num_envs 2
+\end{lstlisting}
+
+\subsection{Multi-Trajectory Training}
+
+\begin{lstlisting}[language=bash]
+python scripts/rsl_rl/train.py \
+  --task=Tracking-Flat-L7_29Dof-v0 \
+  --run_name multi_seed42 \
+  --num_envs=8192 \
+  --headless \
+  --logger wandb \
+  --log_project_name humanoid-lab \
+  --seed 42 \
+  --motion_files motions/filelist.txt
+\end{lstlisting}
+
+\section{AI Assistance Statement}
+
+AI assistance was used for language polishing, translating working notes into academic English, and debugging the Isaac Lab installation. For the multi-trajectory training code, the author designed the intended behavior, including dataset indexing and motion sampling, and AI assistance was used to implement the corresponding code changes. 
+
+The experimental design, execution of experiments, evaluation metrics, figure selection, and all conclusions in this report were completed without AI assistance.
+
+\end{document}

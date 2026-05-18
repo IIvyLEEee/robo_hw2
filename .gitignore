@@ -2,8 +2,6 @@
 .git-backups/
 .monorepo.git/
 .agents/
-.codex/
-report/
 
 # Datasets, generated outputs, logs, and model artifacts
 diffusion_policy/data/
