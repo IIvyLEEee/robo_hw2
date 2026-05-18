@@ -15,7 +15,6 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 
-from diffusion_policy.common.cv2_util import get_image_transform
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 
@@ -108,8 +107,12 @@ def prepare_rgb(images: Dict[str, np.ndarray], payload_key: str, shape: List[int
 
     in_h, in_w = image.shape[1:3]
     if (in_h, in_w) != (out_h, out_w):
-        transform = get_image_transform(input_res=(in_w, in_h), output_res=(out_w, out_h), bgr_to_rgb=False)
-        image = np.stack([transform(frame) for frame in image], axis=0)
+        import cv2
+
+        image = np.stack(
+            [cv2.resize(frame, (out_w, out_h), interpolation=cv2.INTER_AREA) for frame in image],
+            axis=0,
+        )
 
     if image.dtype == np.uint8:
         image = image.astype(np.float32) / 255.0
