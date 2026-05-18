@@ -3,6 +3,9 @@ logs
 wandb
 outputs
 data
+data/
+report/
+.codex/
 data_local
 .vscode
 _wandb

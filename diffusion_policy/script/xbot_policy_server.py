@@ -23,6 +23,16 @@ from diffusion_policy.workspace.base_workspace import BaseWorkspace
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
 
+DEFAULT_IMAGE_KEY_ALIASES = {
+    "image": ("image", "cam_high", "world_cam"),
+    "cam_high": ("cam_high", "image", "world_cam"),
+    "cam_left": ("cam_left", "cam_left_wrist", "left_cam"),
+    "cam_right": ("cam_right", "cam_right_wrist", "right_cam"),
+    "cam_left_wrist": ("cam_left_wrist", "cam_left", "left_cam"),
+    "cam_right_wrist": ("cam_right_wrist", "cam_right", "right_cam"),
+}
+
+
 def parse_key_map(items: List[str]) -> Dict[str, str]:
     result = {}
     for item in items:
@@ -59,6 +69,27 @@ def decode_request(message: bytes) -> Dict[str, Any]:
             value = value.item()
         payload[key] = value
     return payload
+
+
+def resolve_image_key(images: Dict[str, np.ndarray], obs_key: str, image_key_map: Dict[str, str]) -> str:
+    candidates: List[str] = []
+    if obs_key in image_key_map:
+        candidates.append(image_key_map[obs_key])
+    candidates.extend(DEFAULT_IMAGE_KEY_ALIASES.get(obs_key, (obs_key,)))
+
+    seen = set()
+    unique_candidates = []
+    for key in candidates:
+        if key not in seen:
+            seen.add(key)
+            unique_candidates.append(key)
+        if key in images:
+            return key
+
+    raise KeyError(
+        f"Missing image for obs key '{obs_key}'. Tried payload keys {unique_candidates}. "
+        f"Available image keys: {list(images.keys())}"
+    )
 
 
 def prepare_rgb(images: Dict[str, np.ndarray], payload_key: str, shape: List[int]) -> np.ndarray:
@@ -118,7 +149,7 @@ def build_current_obs(
         obs_type = attr.get("type", "low_dim")
         shape = attr["shape"]
         if obs_type == "rgb":
-            payload_key = image_key_map.get(obs_key, obs_key)
+            payload_key = resolve_image_key(images, obs_key, image_key_map)
             obs[obs_key] = prepare_rgb(images, payload_key, shape)
         else:
             payload_key = lowdim_key_map.get(obs_key, obs_key)
@@ -164,7 +195,12 @@ def main():
     parser.add_argument("-c", "--checkpoint", required=True, help="Path to a trained diffusion_policy checkpoint.")
     parser.add_argument("--bind", default="tcp://*:8003", help="ZMQ REP bind address.")
     parser.add_argument("-d", "--device", default="cuda:0", help="Torch device used by the policy.")
-    parser.add_argument("--image-key-map", nargs="*", default=["image=cam_high"])
+    parser.add_argument(
+        "--image-key-map",
+        nargs="*",
+        default=[],
+        help="Optional obs_key=payload_key overrides. Built-in aliases cover cam_high/cam_left/cam_right.",
+    )
     parser.add_argument("--lowdim-key-map", nargs="*", default=["state=state"])
     parser.add_argument("--min-action-steps", type=int, default=5)
     args = parser.parse_args()
@@ -186,6 +222,7 @@ def main():
     print(f"[xbot_policy_server] checkpoint: {args.checkpoint}")
     print(f"[xbot_policy_server] device: {args.device}, n_obs_steps: {n_obs_steps}")
     print(f"[xbot_policy_server] image_key_map: {image_key_map}")
+    print(f"[xbot_policy_server] image_key_aliases: {DEFAULT_IMAGE_KEY_ALIASES}")
     print(f"[xbot_policy_server] lowdim_key_map: {lowdim_key_map}")
 
     try:
